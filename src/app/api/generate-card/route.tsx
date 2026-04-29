@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import sharp from "sharp";
 import type { NextRequest } from "next/server";
 import satori from "satori";
@@ -85,51 +87,29 @@ const RARITY_BORDERS_RAW: Record<RarityTier, RarityBorderRaw> = {
   },
 };
 
-let interRegularBuffer: ArrayBuffer | null = null;
-let interBoldBuffer: ArrayBuffer | null = null;
-
-const FONT_USER_AGENT =
-  "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.118 Safari/537.36";
-
-async function loadInterFont(weight: 400 | 700): Promise<ArrayBuffer> {
-  const cssUrl = `https://fonts.googleapis.com/css2?family=Inter:wght@${weight}&display=swap`;
-  const cssRes = await fetch(cssUrl, {
-    headers: { "User-Agent": FONT_USER_AGENT },
-  });
-  if (!cssRes.ok) {
-    throw new Error(
-      `Failed to load Inter CSS for weight ${weight}: ${cssRes.status}`,
-    );
-  }
-  const css = await cssRes.text();
-  const match = css.match(
-    /src:\s*url\(([^)]+)\)\s*format\(['"]?(truetype|opentype|woff)['"]?\)/,
-  );
-  if (!match) {
-    throw new Error(
-      `Could not extract a Satori-compatible Inter font URL for weight ${weight}`,
-    );
-  }
-  const fontRes = await fetch(match[1]);
-  if (!fontRes.ok) {
-    throw new Error(`Failed to fetch Inter font file (${fontRes.status})`);
-  }
-  return fontRes.arrayBuffer();
-}
+let interVariableBuffer: ArrayBuffer | null = null;
 
 async function getInterFonts() {
-  if (!interRegularBuffer) interRegularBuffer = await loadInterFont(400);
-  if (!interBoldBuffer) interBoldBuffer = await loadInterFont(700);
+  if (!interVariableBuffer) {
+    const fontBuffer = await readFile(
+      join(process.cwd(), "assets/fonts/Inter-Variable.ttf"),
+    );
+    interVariableBuffer = fontBuffer.buffer.slice(
+      fontBuffer.byteOffset,
+      fontBuffer.byteOffset + fontBuffer.byteLength,
+    );
+  }
+
   return [
     {
       name: "Inter",
-      data: interRegularBuffer,
+      data: interVariableBuffer,
       weight: 400 as const,
       style: "normal" as const,
     },
     {
       name: "Inter",
-      data: interBoldBuffer,
+      data: interVariableBuffer,
       weight: 700 as const,
       style: "normal" as const,
     },
