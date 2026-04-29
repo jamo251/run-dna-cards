@@ -448,7 +448,7 @@ export async function POST(request: NextRequest) {
 
     const png = await sharp(Buffer.from(svg)).png().toBuffer();
 
-    return new Response(new Uint8Array(pngBuffer), {
+    return new Response(new Uint8Array(png), {
       status: 200,
       headers: {
         "Content-Type": "image/png",
