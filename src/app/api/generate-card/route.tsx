@@ -1,4 +1,4 @@
-import { Resvg } from "@resvg/resvg-js";
+import sharp from "sharp";
 import type { NextRequest } from "next/server";
 import satori from "satori";
 import type { RunType } from "@/lib/classifier";
@@ -98,16 +98,16 @@ async function loadInterFont(weight: 400 | 700): Promise<ArrayBuffer> {
   });
   if (!cssRes.ok) {
     throw new Error(
-      `Failed to load Inter CSS for weight ${weight}: ${cssRes.status}`
+      `Failed to load Inter CSS for weight ${weight}: ${cssRes.status}`,
     );
   }
   const css = await cssRes.text();
   const match = css.match(
-    /src:\s*url\(([^)]+)\)\s*format\(['"]?(truetype|opentype|woff)['"]?\)/
+    /src:\s*url\(([^)]+)\)\s*format\(['"]?(truetype|opentype|woff)['"]?\)/,
   );
   if (!match) {
     throw new Error(
-      `Could not extract a Satori-compatible Inter font URL for weight ${weight}`
+      `Could not extract a Satori-compatible Inter font URL for weight ${weight}`,
     );
   }
   const fontRes = await fetch(match[1]);
@@ -434,7 +434,7 @@ export async function POST(request: NextRequest) {
   const pathD = coordinatesToPath(
     payload.coordinates,
     HERO_VIEWBOX_WIDTH,
-    HERO_VIEWBOX_HEIGHT
+    HERO_VIEWBOX_HEIGHT,
   );
   const cardElement = <CardLayout payload={payload} pathD={pathD} />;
 
@@ -446,8 +446,7 @@ export async function POST(request: NextRequest) {
       fonts,
     });
 
-    const resvg = new Resvg(svg, { background: "transparent" });
-    const pngBuffer = resvg.render().asPng();
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
 
     return new Response(new Uint8Array(pngBuffer), {
       status: 200,
@@ -460,10 +459,9 @@ export async function POST(request: NextRequest) {
     console.error("Card generation failed:", err);
     return Response.json(
       {
-        error:
-          err instanceof Error ? err.message : "Card generation failed",
+        error: err instanceof Error ? err.message : "Card generation failed",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
