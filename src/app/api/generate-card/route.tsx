@@ -4,6 +4,11 @@ import sharp from "sharp";
 import type { NextRequest } from "next/server";
 import satori from "satori";
 import type { RunType } from "@/lib/classifier";
+import {
+  RARITY_HEX,
+  RARITY_PIPS,
+  RUN_TYPE_HEX,
+} from "@/lib/cardTheme";
 import { coordinatesToPath } from "@/lib/coordinatesToPath";
 import type { NormalizedStats, RarityTier } from "@/lib/scorer";
 
@@ -14,16 +19,12 @@ const CARD_HEIGHT = 880;
 const HERO_VIEWBOX_WIDTH = 510;
 const HERO_VIEWBOX_HEIGHT = 348;
 
+// Satori-friendly accent palette (badge bg/text uses rgba so it works without
+// any Tailwind plumbing). Matches RUN_TYPE_ACCENTS in cardTheme.ts.
 type RunTypeAccentRaw = {
   badgeBg: string;
   badgeText: string;
   barFill: string;
-};
-
-type RarityBorderRaw = {
-  border: string;
-  ring: string;
-  stamp: string;
 };
 
 const RUN_TYPE_ACCENTS_RAW: Record<RunType, RunTypeAccentRaw> = {
@@ -64,28 +65,14 @@ const RUN_TYPE_ACCENTS_RAW: Record<RunType, RunTypeAccentRaw> = {
   },
 };
 
-const RARITY_BORDERS_RAW: Record<RarityTier, RarityBorderRaw> = {
-  Common: {
-    border: "#71717a",
-    ring: "rgba(113,113,122,0.20)",
-    stamp: "rgba(212,212,216,0.80)",
-  },
-  Rare: {
-    border: "#38bdf8",
-    ring: "rgba(56,189,248,0.30)",
-    stamp: "rgba(125,211,252,0.80)",
-  },
-  Epic: {
-    border: "#a78bfa",
-    ring: "rgba(167,139,250,0.30)",
-    stamp: "rgba(196,181,253,0.80)",
-  },
-  Legendary: {
-    border: "#fbbf24",
-    ring: "rgba(251,191,36,0.30)",
-    stamp: "rgba(252,211,77,0.80)",
-  },
-};
+const CARD_BACKGROUND =
+  "radial-gradient(ellipse at 50% 30%, #2a2a4a 0%, #1a1a2e 55%, #0f0f1a 100%)";
+
+// Static holographic sheen for Rare+ rarities. Satori cannot host an absolute
+// overlay as a sibling of layout content, so the highlight is layered into
+// the card background as a stacked gradient (first listed = on top).
+const HIGHLIGHT_GRADIENT =
+  "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.04) 50%, transparent 70%)";
 
 let interRegularBuffer: ArrayBuffer | null = null;
 let interBoldBuffer: ArrayBuffer | null = null;
@@ -143,7 +130,7 @@ function isCardPayload(value: unknown): value is CardPayload {
   if (typeof v.runType !== "string") return false;
   if (!(v.runType in RUN_TYPE_ACCENTS_RAW)) return false;
   if (typeof v.rarity !== "string") return false;
-  if (!(v.rarity in RARITY_BORDERS_RAW)) return false;
+  if (!(v.rarity in RARITY_HEX)) return false;
   if (typeof v.runNumber !== "number") return false;
   if (typeof v.isFirstOnRoute !== "boolean") return false;
   if (!Array.isArray(v.coordinates)) return false;
@@ -175,10 +162,12 @@ function StatCell({
   label,
   score,
   barFill,
+  accentHex,
 }: {
   label: string;
   score: number;
   barFill: string;
+  accentHex: string;
 }) {
   return (
     <div
@@ -189,51 +178,59 @@ function StatCell({
         flex: 1,
       }}
     >
-      <div
+      <span
         style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
+          fontSize: 14,
+          fontWeight: 600,
+          letterSpacing: 2,
+          color: "rgba(255,255,255,0.5)",
+          textTransform: "uppercase",
         }}
       >
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            letterSpacing: 2,
-            color: "rgba(255,255,255,0.5)",
-            textTransform: "uppercase",
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: "white",
-          }}
-        >
-          {Math.round(score)}
-        </span>
-      </div>
+        {label}
+      </span>
       <div
         style={{
           display: "flex",
-          width: "100%",
-          height: 4,
-          borderRadius: 999,
-          backgroundColor: "rgba(255,255,255,0.1)",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
         }}
       >
         <div
           style={{
-            height: 4,
-            width: `${score}%`,
-            borderRadius: 999,
-            backgroundColor: barFill,
+            display: "flex",
+            flex: 1,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: "rgba(255,255,255,0.08)",
+            overflow: "hidden",
           }}
-        />
+        >
+          <div
+            style={{
+              display: "flex",
+              height: 8,
+              width: `${score}%`,
+              borderRadius: 4,
+              backgroundColor: barFill,
+              boxShadow: `0 0 6px ${accentHex}`,
+            }}
+          />
+        </div>
+        <span
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            width: 28,
+            fontSize: 14,
+            fontWeight: 700,
+            color: "white",
+            letterSpacing: 0.5,
+          }}
+        >
+          {Math.round(score)}
+        </span>
       </div>
     </div>
   );
@@ -247,7 +244,11 @@ function CardLayout({
   pathD: string;
 }) {
   const accent = RUN_TYPE_ACCENTS_RAW[payload.runType];
-  const rarity = RARITY_BORDERS_RAW[payload.rarity];
+  const accentHex = RUN_TYPE_HEX[payload.runType];
+  const rarityHex = RARITY_HEX[payload.rarity];
+  const rarityHex25 = `${rarityHex}40`;
+  const showHighlight = payload.rarity !== "Common";
+
   const stats = [
     { label: "Distance", score: clampScore(payload.stats.distance) },
     { label: "Elevation", score: clampScore(payload.stats.elevation) },
@@ -262,150 +263,191 @@ function CardLayout({
       style={{
         width: CARD_WIDTH,
         height: CARD_HEIGHT,
-        backgroundColor: "#1a1a2e",
-        border: `4px solid ${rarity.border}`,
-        boxShadow: `0 0 0 8px ${rarity.ring}`,
-        borderRadius: 28,
-        padding: 36,
         display: "flex",
-        flexDirection: "column",
-        gap: 22,
+        border: `3px solid ${rarityHex}`,
+        padding: 4,
+        background: "#0f0f1a",
+        borderRadius: 20,
         color: "white",
         fontFamily: "Inter",
       }}
     >
       <div
         style={{
+          flex: 1,
           display: "flex",
-          width: "100%",
-          height: 396,
-          backgroundColor: "rgba(0,0,0,0.6)",
-          border: "1px solid rgba(255,255,255,0.05)",
-          borderRadius: 20,
-          padding: 24,
-          alignItems: "center",
-          justifyContent: "center",
+          flexDirection: "column",
+          border: `1px solid ${rarityHex25}`,
+          borderRadius: 16,
+          overflow: "hidden",
+          background: showHighlight
+            ? `${HIGHLIGHT_GRADIENT}, ${CARD_BACKGROUND}`
+            : CARD_BACKGROUND,
+          padding: 36,
+          gap: 22,
         }}
       >
-        <svg
-          width={HERO_VIEWBOX_WIDTH}
-          height={HERO_VIEWBOX_HEIGHT}
-          viewBox={`0 0 ${HERO_VIEWBOX_WIDTH} ${HERO_VIEWBOX_HEIGHT}`}
-        >
-          <path
-            d={pathD}
-            stroke="white"
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </svg>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <span
-          style={{
-            fontSize: 44,
-            fontWeight: 700,
-            letterSpacing: -1,
-            color: "white",
-            lineHeight: 1.1,
-          }}
-        >
-          {payload.runName}
-        </span>
         <div
           style={{
             display: "flex",
-            alignSelf: "flex-start",
-            paddingLeft: 14,
-            paddingRight: 14,
-            paddingTop: 6,
-            paddingBottom: 6,
-            borderRadius: 999,
-            backgroundColor: accent.badgeBg,
-            color: accent.badgeText,
-            fontSize: 16,
-            fontWeight: 600,
-            letterSpacing: 1.5,
-            textTransform: "uppercase",
+            width: "100%",
+            height: 396,
+            background: `radial-gradient(ellipse at 50% 50%, ${accentHex}14 0%, transparent 70%)`,
+            boxShadow: "inset 0 0 40px rgba(0,0,0,0.6)",
+            border: "1px solid rgba(255,255,255,0.05)",
+            borderRadius: 20,
+            padding: 24,
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          {payload.runType}
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 18,
-          flex: 1,
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "row", gap: 24 }}>
-          {stats.slice(0, 3).map((stat) => (
-            <StatCell
-              key={stat.label}
-              label={stat.label}
-              score={stat.score}
-              barFill={accent.barFill}
+          <svg
+            width={HERO_VIEWBOX_WIDTH}
+            height={HERO_VIEWBOX_HEIGHT}
+            viewBox={`0 0 ${HERO_VIEWBOX_WIDTH} ${HERO_VIEWBOX_HEIGHT}`}
+          >
+            <path
+              d={pathD}
+              stroke="white"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              style={{
+                filter: `drop-shadow(0 0 4px ${accentHex})`,
+              }}
             />
-          ))}
+          </svg>
         </div>
-        <div style={{ display: "flex", flexDirection: "row", gap: 24 }}>
-          {stats.slice(3, 6).map((stat) => (
-            <StatCell
-              key={stat.label}
-              label={stat.label}
-              score={stat.score}
-              barFill={accent.barFill}
-            />
-          ))}
-        </div>
-      </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 500,
-            letterSpacing: 2,
-            color: "rgba(255,255,255,0.4)",
-            textTransform: "uppercase",
-          }}
-        >
-          Run {padRunNumber(payload.runNumber)}/365
-        </span>
-        {payload.isFirstOnRoute && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span
+            style={{
+              fontSize: 44,
+              fontWeight: 800,
+              letterSpacing: -1,
+              color: "white",
+              lineHeight: 1.1,
+              textShadow: `0 0 8px ${accentHex}33`,
+            }}
+          >
+            {payload.runName}
+          </span>
           <div
             style={{
               display: "flex",
-              border: "1px solid rgba(255,255,255,0.15)",
-              borderRadius: 4,
-              paddingLeft: 8,
-              paddingRight: 8,
-              paddingTop: 3,
-              paddingBottom: 3,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignSelf: "flex-start",
+                paddingLeft: 14,
+                paddingRight: 14,
+                paddingTop: 6,
+                paddingBottom: 6,
+                borderRadius: 999,
+                border: `1px solid ${accentHex}`,
+                backgroundColor: accent.badgeBg,
+                color: accent.badgeText,
+                fontSize: 16,
+                fontWeight: 600,
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+            >
+              {payload.runType}
+            </div>
+            <span
+              style={{
+                display: "flex",
+                fontSize: 16,
+                color: rarityHex,
+                letterSpacing: 6,
+                lineHeight: 1,
+              }}
+            >
+              {RARITY_PIPS[payload.rarity]}
+            </span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+            flex: 1,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "row", gap: 24 }}>
+            {stats.slice(0, 3).map((stat) => (
+              <StatCell
+                key={stat.label}
+                label={stat.label}
+                score={stat.score}
+                barFill={accent.barFill}
+                accentHex={accentHex}
+              />
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "row", gap: 24 }}>
+            {stats.slice(3, 6).map((stat) => (
+              <StatCell
+                key={stat.label}
+                label={stat.label}
+                score={stat.score}
+                barFill={accent.barFill}
+                accentHex={accentHex}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span
+            style={{
               fontSize: 14,
               fontWeight: 500,
               letterSpacing: 2,
-              color: rarity.stamp,
+              color: "rgba(255,255,255,0.4)",
               textTransform: "uppercase",
             }}
           >
-            1st Edition
-          </div>
-        )}
+            Run {padRunNumber(payload.runNumber)}/365
+          </span>
+          {payload.isFirstOnRoute && (
+            <div
+              style={{
+                display: "flex",
+                border: `1px solid ${rarityHex}`,
+                borderRadius: 9999,
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 2,
+                paddingBottom: 2,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.2em",
+                color: rarityHex,
+                textTransform: "uppercase",
+              }}
+            >
+              1st Edition
+            </div>
+          )}
+        </div>
+        </div>
       </div>
-    </div>
   );
 }
 

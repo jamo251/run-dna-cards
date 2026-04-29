@@ -73,3 +73,31 @@ export const RARITY_BORDERS: Record<RarityTier, RarityBorder> = {
     stamp: "text-amber-300/80",
   },
 };
+
+// Raw hex equivalents of the Tailwind palettes above. Used by surfaces that
+// need real color values rather than class names: Satori inline styles, CSS
+// box-shadow / drop-shadow / text-shadow, and any dynamic borderColor.
+// Keep these in sync with RUN_TYPE_ACCENTS / RARITY_BORDERS.
+export const RUN_TYPE_HEX: Record<RunType, string> = {
+  Sprinter: "#fb7185",
+  Mountaineer: "#fbbf24",
+  Metronome: "#22d3ee",
+  Explorer: "#34d399",
+  Grinder: "#cbd5e1",
+  "Negative Splitter": "#10b981",
+  Heartbreaker: "#ec4899",
+};
+
+export const RARITY_HEX: Record<RarityTier, string> = {
+  Common: "#71717a",
+  Rare: "#38bdf8",
+  Epic: "#a78bfa",
+  Legendary: "#fbbf24",
+};
+
+export const RARITY_PIPS: Record<RarityTier, string> = {
+  Common: "●",
+  Rare: "●●",
+  Epic: "●●●",
+  Legendary: "★",
+};

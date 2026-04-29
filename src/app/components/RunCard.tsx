@@ -1,6 +1,11 @@
 import RouteMap from "@/app/components/RouteMap";
 import type { RunType } from "@/lib/classifier";
-import { RUN_TYPE_ACCENTS } from "@/lib/cardTheme";
+import {
+  RARITY_HEX,
+  RARITY_PIPS,
+  RUN_TYPE_ACCENTS,
+  RUN_TYPE_HEX,
+} from "@/lib/cardTheme";
 import type { NormalizedStats, RarityTier } from "@/lib/scorer";
 
 export type RunCardProps = {
@@ -16,34 +21,6 @@ export type RunCardProps = {
 type StatEntry = {
   label: string;
   score: number;
-};
-
-// Raw hex tokens that mirror the Tailwind palette already used in
-// src/lib/cardTheme.ts. Kept local because src/lib is out of scope for this
-// pass and several effects (box-shadow, drop-shadow, text-shadow, SVG stroke
-// glow, dynamic borders) need real color values, not class names.
-const RUN_TYPE_HEX: Record<RunType, string> = {
-  Sprinter: "#fb7185",
-  Mountaineer: "#fbbf24",
-  Metronome: "#22d3ee",
-  Explorer: "#34d399",
-  Grinder: "#cbd5e1",
-  "Negative Splitter": "#10b981",
-  Heartbreaker: "#ec4899",
-};
-
-const RARITY_HEX: Record<RarityTier, string> = {
-  Common: "#71717a",
-  Rare: "#38bdf8",
-  Epic: "#a78bfa",
-  Legendary: "#fbbf24",
-};
-
-const RARITY_PIPS: Record<RarityTier, string> = {
-  Common: "●",
-  Rare: "●●",
-  Epic: "●●●",
-  Legendary: "★",
 };
 
 const NOISE_BACKGROUND_IMAGE =
