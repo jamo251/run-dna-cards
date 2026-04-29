@@ -1,4 +1,5 @@
 import RunCard, { type RunCardProps } from "@/app/components/RunCard";
+import type { RarityTier } from "@/lib/scorer";
 
 const PREVIEW_COORDINATES: Array<[number, number]> = [
   [-26.105, 28.045],
@@ -43,9 +44,11 @@ const PREVIEW_PROPS: RunCardProps = {
   isFirstOnRoute: true,
 };
 
+const RARITY_VARIANTS: RarityTier[] = ["Common", "Rare", "Epic"];
+
 export default function CardPreview() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0f] px-6 py-16">
+    <main className="flex min-h-screen flex-col items-center bg-[#0a0a0f] px-6 py-16">
       <header className="mb-10 text-center">
         <h1 className="text-2xl font-bold tracking-tight text-white">
           Card Preview
@@ -56,6 +59,22 @@ export default function CardPreview() {
       </header>
 
       <RunCard {...PREVIEW_PROPS} />
+
+      <section className="mt-16 flex w-full max-w-5xl flex-col items-center gap-6">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.3em] text-white/40">
+          Rarity variants
+        </h2>
+        <div className="flex flex-wrap items-start justify-center gap-8">
+          {RARITY_VARIANTS.map((rarity) => (
+            <RunCard
+              key={rarity}
+              {...PREVIEW_PROPS}
+              rarity={rarity}
+              runName={`${rarity} Variant`}
+            />
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

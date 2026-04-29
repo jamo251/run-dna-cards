@@ -1,6 +1,6 @@
 import RouteMap from "@/app/components/RouteMap";
 import type { RunType } from "@/lib/classifier";
-import { RARITY_BORDERS, RUN_TYPE_ACCENTS } from "@/lib/cardTheme";
+import { RUN_TYPE_ACCENTS } from "@/lib/cardTheme";
 import type { NormalizedStats, RarityTier } from "@/lib/scorer";
 
 export type RunCardProps = {
@@ -17,6 +17,40 @@ type StatEntry = {
   label: string;
   score: number;
 };
+
+// Raw hex tokens that mirror the Tailwind palette already used in
+// src/lib/cardTheme.ts. Kept local because src/lib is out of scope for this
+// pass and several effects (box-shadow, drop-shadow, text-shadow, SVG stroke
+// glow, dynamic borders) need real color values, not class names.
+const RUN_TYPE_HEX: Record<RunType, string> = {
+  Sprinter: "#fb7185",
+  Mountaineer: "#fbbf24",
+  Metronome: "#22d3ee",
+  Explorer: "#34d399",
+  Grinder: "#cbd5e1",
+  "Negative Splitter": "#10b981",
+  Heartbreaker: "#ec4899",
+};
+
+const RARITY_HEX: Record<RarityTier, string> = {
+  Common: "#71717a",
+  Rare: "#38bdf8",
+  Epic: "#a78bfa",
+  Legendary: "#fbbf24",
+};
+
+const RARITY_PIPS: Record<RarityTier, string> = {
+  Common: "●",
+  Rare: "●●",
+  Epic: "●●●",
+  Legendary: "★",
+};
+
+const NOISE_BACKGROUND_IMAGE =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")";
+
+const CARD_BACKGROUND =
+  "radial-gradient(ellipse at 50% 30%, #2a2a4a 0%, #1a1a2e 55%, #0f0f1a 100%)";
 
 function clampScore(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -43,22 +77,26 @@ function StatCell({
   label,
   score,
   barFillClassName,
-}: StatEntry & { barFillClassName: string }) {
+  accentHex,
+}: StatEntry & { barFillClassName: string; accentHex: string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
-          {label}
-        </span>
-        <span className="text-sm font-bold tabular-nums text-white">
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-white/50">
+        {label}
+      </span>
+      <div className="flex items-center gap-2">
+        <div className="relative h-2 flex-1 overflow-hidden rounded bg-white/[0.08]">
+          <div
+            className={`h-full rounded ${barFillClassName}`}
+            style={{
+              width: `${score}%`,
+              boxShadow: `0 0 6px ${accentHex}`,
+            }}
+          />
+        </div>
+        <span className="w-7 text-right font-mono text-[10px] font-bold tabular-nums text-white">
           {Math.round(score)}
         </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-        <div
-          className={`h-full rounded-full ${barFillClassName}`}
-          style={{ width: `${score}%` }}
-        />
       </div>
     </div>
   );
@@ -74,52 +112,116 @@ export default function RunCard({
   isFirstOnRoute,
 }: RunCardProps) {
   const accent = RUN_TYPE_ACCENTS[runType];
-  const rarityStyle = RARITY_BORDERS[rarity];
+  const accentHex = RUN_TYPE_HEX[runType];
+  const rarityHex = RARITY_HEX[rarity];
+  const rarityHex30 = `${rarityHex}4D`;
   const statEntries = buildStats(stats);
   const setNumberLabel = `Run ${padRunNumber(runNumber)}/365`;
+  const showShimmer = rarity !== "Common";
 
   return (
     <div
-      className={`relative h-[504px] w-[360px] overflow-hidden rounded-2xl border-2 bg-[#1a1a2e] shadow-[0_20px_60px_rgba(0,0,0,0.5)] ring-4 ${rarityStyle.border} ${rarityStyle.ring}`}
+      className="rounded-[20px]"
+      style={{
+        border: `3px solid ${rarityHex}`,
+        padding: 4,
+        background: "#0f0f1a",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+      }}
     >
-      <div className="absolute inset-0 rounded-2xl shadow-[inset_0_0_24px_rgba(0,0,0,0.6)]" />
+      <div
+        className="relative h-[504px] w-[360px] overflow-hidden rounded-[16px]"
+        style={{
+          border: `1px solid ${rarityHex30}`,
+          background: CARD_BACKGROUND,
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 mix-blend-overlay opacity-[0.03]"
+          style={{ backgroundImage: NOISE_BACKGROUND_IMAGE }}
+        />
 
-      <div className="relative flex h-full flex-col gap-4 p-5">
-        <div className="flex flex-[0_0_45%] items-center justify-center overflow-hidden rounded-xl border border-white/5 bg-black/60 p-3 [&_svg]:!m-0 [&_svg]:h-full [&_svg]:w-full">
-          <RouteMap coordinates={coordinates} />
-        </div>
+        {showShimmer && (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-0 top-0 h-[200%] w-[200%]"
+            style={{
+              background:
+                "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.05) 50%, transparent 70%)",
+              animation: "shimmer 3s linear infinite",
+            }}
+          />
+        )}
 
-        <div className="flex flex-col gap-2">
-          <h2 className="text-2xl font-bold leading-tight tracking-tight text-white">
-            {runName}
-          </h2>
-          <span
-            className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wider ${accent.badgeBg} ${accent.badgeText}`}
+        <div className="relative flex h-full flex-col gap-4 p-5">
+          <div
+            className="route-svg-glow flex flex-[0_0_45%] items-center justify-center overflow-hidden rounded-xl border border-white/5 p-3 [&_svg]:!m-0 [&_svg]:h-full [&_svg]:w-full"
+            style={{
+              background: `radial-gradient(ellipse at 50% 50%, ${accentHex}14 0%, transparent 70%)`,
+              boxShadow: "inset 0 0 40px rgba(0,0,0,0.6)",
+            }}
           >
-            {runType}
-          </span>
-        </div>
-
-        <div className="grid flex-1 grid-cols-3 grid-rows-2 gap-x-4 gap-y-3">
-          {statEntries.map((stat) => (
-            <StatCell
-              key={stat.label}
-              label={stat.label}
-              score={stat.score}
-              barFillClassName={accent.barFill}
-            />
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-widest text-white/40">
-          <span>{setNumberLabel}</span>
-          {isFirstOnRoute && (
-            <span
-              className={`rounded-sm border border-white/15 px-1.5 py-0.5 ${rarityStyle.stamp}`}
+            <div
+              className="flex h-full w-full items-center justify-center"
+              style={{ filter: `drop-shadow(0 0 4px ${accentHex})` }}
             >
-              1st Edition
-            </span>
-          )}
+              <RouteMap coordinates={coordinates} />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h2
+              className="text-3xl font-extrabold leading-tight tracking-tight text-white"
+              style={{ textShadow: `0 0 8px ${accentHex}33` }}
+            >
+              {runName}
+            </h2>
+            <div className="flex items-center gap-3">
+              <span
+                className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wider ${accent.badgeBg} ${accent.badgeText}`}
+                style={{ borderColor: accentHex }}
+              >
+                {runType}
+              </span>
+              <span
+                className="text-[11px] leading-none"
+                style={{ color: rarityHex, letterSpacing: "0.3em" }}
+                aria-label={`${rarity} rarity`}
+                title={rarity}
+              >
+                {RARITY_PIPS[rarity]}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 grid-rows-2 gap-x-4 gap-y-3">
+            {statEntries.map((stat) => (
+              <StatCell
+                key={stat.label}
+                label={stat.label}
+                score={stat.score}
+                barFillClassName={accent.barFill}
+                accentHex={accentHex}
+              />
+            ))}
+          </div>
+
+          <div className="mt-auto flex items-center justify-between text-[10px] font-medium uppercase tracking-widest text-white/40">
+            <span>{setNumberLabel}</span>
+            {isFirstOnRoute && (
+              <span
+                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase"
+                style={{
+                  borderColor: rarityHex,
+                  color: rarityHex,
+                  letterSpacing: "0.2em",
+                }}
+              >
+                1st Edition
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
