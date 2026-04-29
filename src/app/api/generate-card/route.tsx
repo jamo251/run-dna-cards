@@ -87,29 +87,39 @@ const RARITY_BORDERS_RAW: Record<RarityTier, RarityBorderRaw> = {
   },
 };
 
-let interVariableBuffer: ArrayBuffer | null = null;
+let interRegularBuffer: ArrayBuffer | null = null;
+let interBoldBuffer: ArrayBuffer | null = null;
 
 async function getInterFonts() {
-  if (!interVariableBuffer) {
-    const fontBuffer = await readFile(
-      join(process.cwd(), "assets/fonts/Inter-Variable.ttf"),
+  if (!interRegularBuffer) {
+    const regularFontBuffer = await readFile(
+      join(process.cwd(), "assets/fonts/Inter-Regular.ttf"),
     );
-    interVariableBuffer = fontBuffer.buffer.slice(
-      fontBuffer.byteOffset,
-      fontBuffer.byteOffset + fontBuffer.byteLength,
+    interRegularBuffer = regularFontBuffer.buffer.slice(
+      regularFontBuffer.byteOffset,
+      regularFontBuffer.byteOffset + regularFontBuffer.byteLength,
+    );
+  }
+  if (!interBoldBuffer) {
+    const boldFontBuffer = await readFile(
+      join(process.cwd(), "assets/fonts/Inter-Bold.ttf"),
+    );
+    interBoldBuffer = boldFontBuffer.buffer.slice(
+      boldFontBuffer.byteOffset,
+      boldFontBuffer.byteOffset + boldFontBuffer.byteLength,
     );
   }
 
   return [
     {
       name: "Inter",
-      data: interVariableBuffer,
+      data: interRegularBuffer,
       weight: 400 as const,
       style: "normal" as const,
     },
     {
       name: "Inter",
-      data: interVariableBuffer,
+      data: interBoldBuffer,
       weight: 700 as const,
       style: "normal" as const,
     },
