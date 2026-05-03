@@ -18,8 +18,12 @@ export async function fetchRunCardPng(props: RunCardProps): Promise<Blob> {
   if (!response.ok) {
     let message = `Card generation failed (${response.status})`;
     try {
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        requestId?: string;
+      };
       if (data.error) message = data.error;
+      if (data.requestId) message = `${message} (ref: ${data.requestId})`;
     } catch {
       // Response wasn't JSON; keep default message.
     }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -13,6 +14,10 @@ import { coordinatesToPath } from "@/lib/coordinatesToPath";
 import type { NormalizedStats, RarityTier } from "@/lib/scorer";
 
 export const runtime = "nodejs";
+
+const MAX_CARD_BODY_BYTES = 512 * 1024;
+const MAX_RUN_NAME_LENGTH = 120;
+const MAX_COORDINATE_PAIRS = 25_000;
 
 const CARD_WIDTH = 630;
 const CARD_HEIGHT = 880;
@@ -123,18 +128,44 @@ type CardPayload = {
   isFirstOnRoute: boolean;
 };
 
-function isCardPayload(value: unknown): value is CardPayload {
-  if (typeof value !== "object" || value === null) return false;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isValidCoordinates(
+  value: unknown,
+): value is Array<[number, number]> {
+  if (!Array.isArray(value)) return false;
+  if (value.length > MAX_COORDINATE_PAIRS) return false;
+  for (const pair of value) {
+    if (!Array.isArray(pair) || pair.length !== 2) return false;
+    const lat = pair[0];
+    const lon = pair[1];
+    if (!isFiniteNumber(lat) || !isFiniteNumber(lon)) return false;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
+  }
+  return true;
+}
+
+function parseCardPayload(value: unknown): CardPayload | null {
+  if (typeof value !== "object" || value === null) return null;
   const v = value as Record<string, unknown>;
-  if (typeof v.runName !== "string") return false;
-  if (typeof v.runType !== "string") return false;
-  if (!(v.runType in RUN_TYPE_ACCENTS_RAW)) return false;
-  if (typeof v.rarity !== "string") return false;
-  if (!(v.rarity in RARITY_HEX)) return false;
-  if (typeof v.runNumber !== "number") return false;
-  if (typeof v.isFirstOnRoute !== "boolean") return false;
-  if (!Array.isArray(v.coordinates)) return false;
-  if (typeof v.stats !== "object" || v.stats === null) return false;
+  if (typeof v.runType !== "string") return null;
+  if (!(v.runType in RUN_TYPE_ACCENTS_RAW)) return null;
+  if (typeof v.rarity !== "string") return null;
+  if (!(v.rarity in RARITY_HEX)) return null;
+  if (typeof v.runNumber !== "number" || !Number.isInteger(v.runNumber)) {
+    return null;
+  }
+  if (v.runNumber < 0 || v.runNumber > 999_999) return null;
+  if (typeof v.isFirstOnRoute !== "boolean") return null;
+  if (typeof v.runName !== "string") return null;
+  const runName = v.runName.trim();
+  if (runName.length === 0 || runName.length > MAX_RUN_NAME_LENGTH) {
+    return null;
+  }
+  if (!isValidCoordinates(v.coordinates)) return null;
+  if (typeof v.stats !== "object" || v.stats === null) return null;
 
   const stats = v.stats as Record<string, unknown>;
   const expected = [
@@ -145,7 +176,17 @@ function isCardPayload(value: unknown): value is CardPayload {
     "suffer",
     "novelty",
   ];
-  return expected.every((key) => typeof stats[key] === "number");
+  if (!expected.every((key) => isFiniteNumber(stats[key]))) return null;
+
+  return {
+    runName,
+    runType: v.runType as RunType,
+    rarity: v.rarity as RarityTier,
+    stats: v.stats as NormalizedStats,
+    coordinates: v.coordinates,
+    runNumber: v.runNumber,
+    isFirstOnRoute: v.isFirstOnRoute,
+  };
 }
 
 function clampScore(value: number): number {
@@ -452,14 +493,45 @@ function CardLayout({
 }
 
 export async function POST(request: NextRequest) {
-  let payload: unknown;
+  const generationSecret = process.env.CARD_GENERATION_SECRET;
+  if (generationSecret) {
+    const provided = request.headers.get("x-card-generation-secret");
+    if (provided !== generationSecret) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
+  const lengthHeader = request.headers.get("content-length");
+  if (lengthHeader) {
+    const parsedLength = Number.parseInt(lengthHeader, 10);
+    if (
+      Number.isFinite(parsedLength) &&
+      parsedLength > MAX_CARD_BODY_BYTES
+    ) {
+      return Response.json({ error: "Request body too large" }, { status: 413 });
+    }
+  }
+
+  let rawBody: string;
   try {
-    payload = await request.json();
+    rawBody = await request.text();
+  } catch {
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  if (rawBody.length > MAX_CARD_BODY_BYTES) {
+    return Response.json({ error: "Request body too large" }, { status: 413 });
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(rawBody) as unknown;
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!isCardPayload(payload)) {
+  const payload = parseCardPayload(parsedJson);
+  if (!payload) {
     return Response.json({ error: "Invalid card payload" }, { status: 400 });
   }
 
@@ -469,6 +541,8 @@ export async function POST(request: NextRequest) {
     HERO_VIEWBOX_HEIGHT,
   );
   const cardElement = <CardLayout payload={payload} pathD={pathD} />;
+
+  const requestId = randomUUID();
 
   try {
     const fonts = await getInterFonts();
@@ -485,13 +559,15 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "image/png",
         "Cache-Control": "no-store",
+        "X-Request-Id": requestId,
       },
     });
   } catch (err) {
-    console.error("Card generation failed:", err);
+    console.error("Card generation failed:", requestId, err);
     return Response.json(
       {
-        error: err instanceof Error ? err.message : "Card generation failed",
+        error: "Card generation failed",
+        requestId,
       },
       { status: 500 },
     );

@@ -25,6 +25,7 @@ import {
   type NormalizedStats,
   type RarityTier,
 } from "@/lib/scorer";
+import { MAX_GPX_FILE_BYTES } from "@/lib/gpxLimits";
 import { buildShareCaption } from "@/lib/shareCaption";
 
 type SaveMode = { kind: "new" } | { kind: "evolve"; id: number };
@@ -160,6 +161,15 @@ export default function GpxUploader() {
         setStatus({
           kind: "error",
           message: `"${file.name}" isn't a .gpx file. Please upload a GPX export from your run.`,
+        });
+        return;
+      }
+
+      if (file.size > MAX_GPX_FILE_BYTES) {
+        resetParsedState();
+        setStatus({
+          kind: "error",
+          message: `"${file.name}" is too large. Maximum GPX size is ${Math.round(MAX_GPX_FILE_BYTES / (1024 * 1024))} MB.`,
         });
         return;
       }

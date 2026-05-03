@@ -1,4 +1,8 @@
 import { gpx } from "@tmcw/togeojson";
+import {
+  MAX_GPX_TRACKPOINTS,
+  MAX_GPX_XML_CHARS,
+} from "@/lib/gpxLimits";
 
 type NullableNumber = number | null;
 
@@ -71,6 +75,26 @@ function findTrackpointHeartRate(trackPointElement: Element): NullableNumber {
   }
 
   return null;
+}
+
+function countGeoJsonCoords(geoJson: ReturnType<typeof gpx>): number {
+  let total = 0;
+  for (const feature of geoJson.features) {
+    const geometry = feature.geometry;
+    if (!geometry) continue;
+
+    if (geometry.type === "LineString") {
+      total += geometry.coordinates.length;
+      continue;
+    }
+
+    if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        total += line.length;
+      }
+    }
+  }
+  return total;
 }
 
 function extractTrackPoints(xmlDocument: Document): TrackPoint[] {
@@ -245,12 +269,29 @@ function computeHeartRate(trackPoints: TrackPoint[]): {
 }
 
 export function parseGpx(xmlString: string): ParsedGpxStats {
+  if (xmlString.length > MAX_GPX_XML_CHARS) {
+    throw new Error("GPX file is too large.");
+  }
+
   const xmlDocument = new DOMParser().parseFromString(xmlString, "text/xml");
   if (xmlDocument.getElementsByTagName("parsererror").length > 0) {
     throw new Error("Invalid GPX XML.");
   }
 
   const geoJson = gpx(xmlDocument);
+  const trkptCount = xmlDocument.getElementsByTagName("trkpt").length;
+  if (trkptCount > MAX_GPX_TRACKPOINTS) {
+    throw new Error(
+      `GPX contains too many track points (max ${MAX_GPX_TRACKPOINTS}).`,
+    );
+  }
+  const geoCoordCount = countGeoJsonCoords(geoJson);
+  if (geoCoordCount > MAX_GPX_TRACKPOINTS) {
+    throw new Error(
+      `GPX route geometry is too dense (max ${MAX_GPX_TRACKPOINTS} coordinates).`,
+    );
+  }
+
   const trackPoints = extractTrackPoints(xmlDocument);
   const coordinatesFromGeoJson = flattenGeoJsonCoordinates(geoJson);
   const coordinates =
