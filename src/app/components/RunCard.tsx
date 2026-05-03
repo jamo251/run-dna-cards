@@ -122,7 +122,7 @@ export default function RunCard({
         {showShimmer && (
           <div
             aria-hidden
-            className="pointer-events-none absolute left-0 top-0 h-[200%] w-[200%]"
+            className="card-shimmer pointer-events-none absolute left-0 top-0 h-[200%] w-[200%]"
             style={{
               background:
                 "linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.05) 50%, transparent 70%)",
@@ -147,10 +147,11 @@ export default function RunCard({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex min-h-0 flex-col gap-2">
             <h2
-              className="text-3xl font-extrabold leading-tight tracking-tight text-white"
+              className="line-clamp-3 min-h-0 break-words text-3xl font-extrabold leading-tight tracking-tight text-white"
               style={{ textShadow: `0 0 8px ${accentHex}33` }}
+              title={runName}
             >
               {runName}
             </h2>

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import CardExportActions from "@/app/components/CardExportActions";
 import RunCard, { type RunCardProps } from "@/app/components/RunCard";
-import ShareModal from "@/app/components/ShareModal";
 import {
   downsampleCoordinates,
   evolveCard,
@@ -26,13 +27,6 @@ import {
 } from "@/lib/scorer";
 import { buildShareCaption } from "@/lib/shareCaption";
 
-type DownloadStatus =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string };
-
-type CardBlobCache = { blob: Blob; url: string } | null;
-
 type SaveMode = { kind: "new" } | { kind: "evolve"; id: number };
 
 type UploadOutcome =
@@ -55,14 +49,6 @@ const STAGE_LABELS: Record<EvolutionStage, string> = {
   final: "Final Form",
 };
 
-function slugify(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug.length > 0 ? slug : "run-card";
-}
-
 type Status =
   | { kind: "idle" }
   | { kind: "error"; message: string }
@@ -83,6 +69,8 @@ async function readFileAsText(file: File): Promise<string> {
 }
 
 export default function GpxUploader() {
+  const fileInputId = useId();
+  const dropZoneInstructionsId = useId();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [parsedStats, setParsedStats] = useState<ParsedGpxStats | null>(null);
   const [runType, setRunType] = useState<RunType | null>(null);
@@ -93,14 +81,6 @@ export default function GpxUploader() {
   const [runName, setRunName] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus>({
-    kind: "idle",
-  });
-  const [shareStatus, setShareStatus] = useState<DownloadStatus>({
-    kind: "idle",
-  });
-  const [cardBlobCache, setCardBlobCache] = useState<CardBlobCache>(null);
-  const [isShareOpen, setIsShareOpen] = useState(false);
   const [runNumber, setRunNumber] = useState<number | null>(null);
   const [isFirstOnRoute, setIsFirstOnRoute] = useState<boolean | null>(null);
   const [routeFingerprint, setRouteFingerprint] = useState<string | null>(null);
@@ -109,26 +89,7 @@ export default function GpxUploader() {
   const [evolutionCount, setEvolutionCount] = useState<number | null>(null);
   const [saveMode, setSaveMode] = useState<SaveMode | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<UploadOutcome | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const cardBlobCacheRef = useRef<CardBlobCache>(null);
   const savedParsedRef = useRef<ParsedGpxStats | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (cardBlobCacheRef.current) {
-        URL.revokeObjectURL(cardBlobCacheRef.current.url);
-        cardBlobCacheRef.current = null;
-      }
-    };
-  }, []);
-
-  const clearCardBlobCache = useCallback(() => {
-    if (cardBlobCacheRef.current) {
-      URL.revokeObjectURL(cardBlobCacheRef.current.url);
-      cardBlobCacheRef.current = null;
-    }
-    setCardBlobCache(null);
-  }, []);
 
   const resetParsedState = useCallback(() => {
     setParsedStats(null);
@@ -143,88 +104,7 @@ export default function GpxUploader() {
     setEvolutionCount(null);
     setSaveMode(null);
     setUploadOutcome(null);
-    setDownloadStatus({ kind: "idle" });
-    setShareStatus({ kind: "idle" });
-    setIsShareOpen(false);
     savedParsedRef.current = null;
-    clearCardBlobCache();
-  }, [clearCardBlobCache]);
-
-  const ensureCardBlob = useCallback(
-    async (props: RunCardProps): Promise<{ blob: Blob; url: string }> => {
-      const existing = cardBlobCacheRef.current;
-      if (existing) return existing;
-
-      const response = await fetch("/api/generate-card", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(props),
-      });
-
-      if (!response.ok) {
-        let message = `Card generation failed (${response.status})`;
-        try {
-          const data = (await response.json()) as { error?: string };
-          if (data.error) message = data.error;
-        } catch {
-          // Response wasn't JSON; keep default message.
-        }
-        throw new Error(message);
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const cache = { blob, url };
-      cardBlobCacheRef.current = cache;
-      setCardBlobCache(cache);
-      return cache;
-    },
-    []
-  );
-
-  const handleDownload = useCallback(
-    async (props: RunCardProps) => {
-      setDownloadStatus({ kind: "loading" });
-      try {
-        const { url } = await ensureCardBlob(props);
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = `${slugify(props.runName)}-card.png`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        setDownloadStatus({ kind: "idle" });
-      } catch (err) {
-        setDownloadStatus({
-          kind: "error",
-          message:
-            err instanceof Error ? err.message : "Couldn't generate the card.",
-        });
-      }
-    },
-    [ensureCardBlob]
-  );
-
-  const handleShare = useCallback(
-    async (props: RunCardProps) => {
-      setShareStatus({ kind: "loading" });
-      try {
-        await ensureCardBlob(props);
-        setShareStatus({ kind: "idle" });
-        setIsShareOpen(true);
-      } catch (err) {
-        setShareStatus({
-          kind: "error",
-          message:
-            err instanceof Error ? err.message : "Couldn't generate the card.",
-        });
-      }
-    },
-    [ensureCardBlob]
-  );
-
-  const closeShareModal = useCallback(() => {
-    setIsShareOpen(false);
   }, []);
 
   useEffect(() => {
@@ -379,7 +259,7 @@ export default function GpxUploader() {
   );
 
   const onDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
+    (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
       const file = e.dataTransfer.files?.[0];
@@ -388,7 +268,7 @@ export default function GpxUploader() {
     [handleFile]
   );
 
-  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+  const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
@@ -405,8 +285,6 @@ export default function GpxUploader() {
     },
     [handleFile]
   );
-
-  const openPicker = () => inputRef.current?.click();
 
   const baseBorder = isDragging
     ? "border-emerald-400 bg-emerald-400/5"
@@ -430,8 +308,6 @@ export default function GpxUploader() {
           isFirstOnRoute,
         }
       : null;
-  const isDownloading = downloadStatus.kind === "loading";
-  const isSharing = shareStatus.kind === "loading";
   const shareCaption =
     cardProps != null
       ? buildShareCaption(
@@ -445,20 +321,21 @@ export default function GpxUploader() {
 
   return (
     <div className="w-full max-w-xl">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={openPicker}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            openPicker();
-          }
-        }}
+      <input
+        id={fileInputId}
+        type="file"
+        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        className="sr-only"
+        onChange={onPick}
+        aria-describedby={dropZoneInstructionsId}
+      />
+
+      <label
+        htmlFor={fileInputId}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
-        className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${baseBorder}`}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-colors focus-within:ring-2 focus-within:ring-emerald-400/60 ${baseBorder}`}
       >
         <div className="text-4xl" aria-hidden>
           ↥
@@ -466,17 +343,10 @@ export default function GpxUploader() {
         <div className="text-lg font-medium text-white">
           Drop your .gpx file here
         </div>
-        <div className="text-sm text-white/50">
-          or click to browse — your run becomes a card
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".gpx,application/gpx+xml,application/xml,text/xml"
-          className="hidden"
-          onChange={onPick}
-        />
-      </div>
+        <p id={dropZoneInstructionsId} className="text-sm text-white/50">
+          or click here to browse — your run becomes a card
+        </p>
+      </label>
 
       {status.kind === "error" && (
         <p
@@ -488,10 +358,18 @@ export default function GpxUploader() {
       )}
 
       {status.kind === "success" && (
-        <p className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-          Loaded <span className="font-mono">{status.fileName}</span>. Card
-          rendered below.
-        </p>
+        <div className="mt-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          <p>
+            Loaded <span className="font-mono">{status.fileName}</span>. Card
+            rendered below.
+          </p>
+          <Link
+            href="/collection"
+            className="mt-3 inline-block rounded-full border border-emerald-400/50 bg-black/25 px-4 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-black/35 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+          >
+            View in collection
+          </Link>
+        </div>
       )}
 
       {uploadOutcome?.kind === "no-improvement" && (
@@ -515,6 +393,12 @@ export default function GpxUploader() {
           <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-amber-200">
             {STAGE_LABELS[uploadOutcome.stage]}
           </p>
+          <Link
+            href="/collection"
+            className="mt-3 inline-block rounded-full border border-amber-300/40 bg-black/25 px-4 py-1.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-black/35 focus:outline-none focus:ring-2 focus:ring-amber-300/60"
+          >
+            View in collection
+          </Link>
         </div>
       )}
 
@@ -522,42 +406,10 @@ export default function GpxUploader() {
         <div className="mt-6 flex flex-col items-center gap-4">
           <RunCard {...cardProps} />
 
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => handleDownload(cardProps)}
-              disabled={isDownloading}
-              className="rounded-full border border-white/20 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-emerald-400/60 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isDownloading ? "Generating…" : "Download card"}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleShare(cardProps)}
-              disabled={isSharing}
-              className="rounded-full border border-white/20 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-emerald-400/60 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSharing ? "Preparing…" : "Share card"}
-            </button>
-          </div>
-
-          {downloadStatus.kind === "error" && (
-            <p
-              role="alert"
-              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-            >
-              {downloadStatus.message}
-            </p>
-          )}
-
-          {shareStatus.kind === "error" && (
-            <p
-              role="alert"
-              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-            >
-              {shareStatus.message}
-            </p>
-          )}
+          <CardExportActions
+            cardProps={cardProps}
+            shareCaption={shareCaption}
+          />
 
           <button
             type="button"
@@ -566,16 +418,6 @@ export default function GpxUploader() {
           >
             {showDebug ? "Hide debug stats" : "Show debug stats"}
           </button>
-
-          {cardBlobCache != null && (
-            <ShareModal
-              isOpen={isShareOpen}
-              imageUrl={cardBlobCache.url}
-              imageBlob={cardBlobCache.blob}
-              defaultCaption={shareCaption}
-              onClose={closeShareModal}
-            />
-          )}
 
           {showDebug && (
             <div className="w-full space-y-1 text-sm text-white/70">

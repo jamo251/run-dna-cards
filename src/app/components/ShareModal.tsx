@@ -20,15 +20,9 @@ export default function ShareModal({
   onClose,
 }: ShareModalProps) {
   const [caption, setCaption] = useState(defaultCaption);
-  const [lastDefaultCaption, setLastDefaultCaption] = useState(defaultCaption);
   const [toast, setToast] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  if (lastDefaultCaption !== defaultCaption) {
-    setLastDefaultCaption(defaultCaption);
-    setCaption(defaultCaption);
-  }
 
   useEffect(() => {
     if (!isOpen) return;

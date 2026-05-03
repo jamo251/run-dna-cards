@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import SiteNav from "@/app/components/SiteNav";
 import RunCard from "@/app/components/RunCard";
 import {
   STAT_KEYS,
@@ -33,6 +34,35 @@ const REVEAL_INTERVAL_MS = 300;
 
 type Side = "a" | "b";
 
+function mergeSelectedIntoRoster(
+  roster: StoredCard[],
+  all: StoredCard[] | null,
+  selectedId: number | null
+): StoredCard[] {
+  if (!all || selectedId == null) return roster;
+  if (roster.some((c) => c.id === selectedId)) return roster;
+  const sel = all.find((c) => c.id === selectedId);
+  return sel ? [sel, ...roster] : roster;
+}
+
+function BattleRosterSkeleton() {
+  return (
+    <section
+      className="grid grid-cols-1 gap-6 md:grid-cols-2"
+      role="status"
+      aria-label="Loading roster"
+    >
+      <span className="sr-only">Loading roster…</span>
+      {[0, 1].map((slot) => (
+        <div key={slot} className="flex flex-col gap-3">
+          <div className="h-4 w-28 animate-pulse rounded bg-white/10" />
+          <div className="h-[320px] max-h-[440px] animate-pulse rounded-xl border border-white/10 bg-white/[0.03] md:h-[440px]" />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 export default function BattlePage() {
   const [cards, setCards] = useState<StoredCard[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -40,6 +70,8 @@ export default function BattlePage() {
   const [selectedBId, setSelectedBId] = useState<number | null>(null);
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
   const [revealedRounds, setRevealedRounds] = useState(0);
+  const [rosterQuery, setRosterQuery] = useState("");
+  const [compactRoster, setCompactRoster] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +103,22 @@ export default function BattlePage() {
     }, REVEAL_INTERVAL_MS);
     return () => clearTimeout(t);
   }, [battleResult, revealedRounds]);
+
+  const rosterFiltered = useMemo(() => {
+    if (!cards?.length) return [];
+    const q = rosterQuery.trim().toLowerCase();
+    if (!q) return cards;
+    return cards.filter((c) => c.runName.toLowerCase().includes(q));
+  }, [cards, rosterQuery]);
+
+  const rosterWithSelectionA = useMemo(
+    () => mergeSelectedIntoRoster(rosterFiltered, cards, selectedAId),
+    [rosterFiltered, cards, selectedAId]
+  );
+  const rosterWithSelectionB = useMemo(
+    () => mergeSelectedIntoRoster(rosterFiltered, cards, selectedBId),
+    [rosterFiltered, cards, selectedBId]
+  );
 
   const cardA = useMemo(
     () => cards?.find((c) => c.id === selectedAId) ?? null,
@@ -112,19 +160,19 @@ export default function BattlePage() {
   return (
     <main className="min-h-screen px-6 py-12">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
-        <header className="flex flex-col gap-2">
-          <Link
-            href="/"
-            className="self-start text-sm font-medium text-white/60 underline-offset-4 transition-colors hover:text-white hover:underline"
-          >
-            ← Back to upload
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Card Battle
-          </h1>
-          <p className="text-sm text-white/50">
-            Pick two cards, compare every stat, and crown a winner.
-          </p>
+        <header className="flex flex-col gap-4">
+          <SiteNav />
+          <div className="flex flex-col gap-2">
+            <h1
+              className="text-3xl font-bold tracking-tight text-white sm:text-4xl"
+              id="battle-page-title"
+            >
+              Card Battle
+            </h1>
+            <p className="text-sm text-white/50">
+              Pick two cards, compare every stat, and crown a winner.
+            </p>
+          </div>
         </header>
 
         {loadError && (
@@ -136,9 +184,7 @@ export default function BattlePage() {
           </p>
         )}
 
-        {isLoading && (
-          <p className="text-sm text-white/50">Loading collection…</p>
-        )}
+        {isLoading && <BattleRosterSkeleton />}
 
         {tooFewCards && (
           <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-8 py-16 text-center">
@@ -159,19 +205,52 @@ export default function BattlePage() {
 
         {!isLoading && !tooFewCards && (
           <>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <label className="flex w-full flex-col gap-1 text-xs uppercase tracking-widest text-white/40 sm:max-w-sm">
+                Filter roster by name
+                <input
+                  type="search"
+                  value={rosterQuery}
+                  onChange={(e) => setRosterQuery(e.target.value)}
+                  placeholder="Search run names…"
+                  className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm font-medium text-white placeholder:text-white/30 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                />
+              </label>
+              <div className="flex flex-col items-start gap-1 sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => setCompactRoster((c) => !c)}
+                  className="rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                >
+                  {compactRoster ? "Gallery view" : "Compact list"}
+                </button>
+                {rosterQuery.trim() !== "" && cards != null && (
+                  <p className="text-xs text-white/45">
+                    {rosterFiltered.length} of {cards.length} cards match
+                  </p>
+                )}
+              </div>
+            </div>
+
             <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <SelectorPanel
                 title="Card A"
-                cards={cards}
+                cards={rosterWithSelectionA}
+                allCards={cards}
+                compact={compactRoster}
                 selectedId={selectedAId}
                 otherSelectedId={selectedBId}
+                otherSideTitle="Card B"
                 onSelect={(id) => handleSelect("a", id)}
               />
               <SelectorPanel
                 title="Card B"
-                cards={cards}
+                cards={rosterWithSelectionB}
+                allCards={cards}
+                compact={compactRoster}
                 selectedId={selectedBId}
                 otherSelectedId={selectedAId}
+                otherSideTitle="Card A"
                 onSelect={(id) => handleSelect("b", id)}
               />
             </section>
@@ -207,64 +286,187 @@ export default function BattlePage() {
 type SelectorPanelProps = {
   title: string;
   cards: StoredCard[];
+  /** Full roster — used only for contextual hint when thumbnails are omitted by filter */
+  allCards: StoredCard[];
+  compact: boolean;
   selectedId: number | null;
   otherSelectedId: number | null;
+  otherSideTitle: string;
   onSelect: (id: number) => void;
 };
 
 function SelectorPanel({
   title,
   cards,
+  allCards,
+  compact,
   selectedId,
   otherSelectedId,
+  otherSideTitle,
   onSelect,
 }: SelectorPanelProps) {
+  const otherTakenName =
+    typeof otherSelectedId === "number"
+      ? (allCards.find((c) => c.id === otherSelectedId)?.runName ??
+        otherSideTitle)
+      : otherSideTitle;
+
+  if (compact) {
+    const optionCards = [...cards].sort((a, b) =>
+      (a.runName ?? "").localeCompare(b.runName ?? "", undefined, {
+        sensitivity: "base",
+      })
+    );
+
+    return (
+      <div className="flex flex-col gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
+          {title}
+        </h2>
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
+          {optionCards.length === 0 ? (
+            <p className="text-sm text-white/55">
+              No cards match your search. Clear the roster filter above.
+            </p>
+          ) : (
+            <label className="flex flex-col gap-2">
+              <span className="text-xs uppercase tracking-widest text-white/40">
+                Choose a card
+              </span>
+              <select
+                value={
+                  typeof selectedId === "number"
+                    ? String(selectedId)
+                    : ""
+                }
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") return;
+                  const n = Number(raw);
+                  if (Number.isNaN(n)) return;
+                  onSelect(n);
+                }}
+                aria-label={`Select roster card for ${title}`}
+                className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm font-medium text-white focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+              >
+                <option value="">Select a card…</option>
+                {optionCards
+                  .filter(
+                    (
+                      card
+                    ): card is StoredCard & { id: number } =>
+                      typeof card.id === "number"
+                  )
+                  .map((card) => {
+                  const sid = card.id;
+                  const isTaken = sid === otherSelectedId;
+                  const labelSuffix = ` (#${sid})`;
+                  const optionLabel = `${card.runName}${labelSuffix}${
+                    isTaken ? ` — already in ${otherSideTitle}` : ""
+                  }`;
+                  return (
+                    <option
+                      key={sid}
+                      value={String(sid)}
+                      disabled={isTaken}
+                      title={
+                        isTaken
+                          ? `Already chosen for ${otherSideTitle}`
+                          : undefined
+                      }
+                    >
+                      {optionLabel}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          )}
+          {typeof otherSelectedId === "number" && (
+            <p className="mt-3 text-xs text-white/45">
+              A card highlighted for {otherSideTitle} slot can&rsquo;t be
+              selected here.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-xs font-semibold uppercase tracking-widest text-white/40">
         {title}
       </h2>
       <div className="max-h-[440px] overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02] p-3">
-        <div className="flex flex-wrap items-start justify-center gap-3">
-          {cards.map((card) => {
-            const isSelected = card.id === selectedId;
-            const isTakenByOther = card.id === otherSelectedId;
-            return (
-              <button
-                key={card.id}
-                type="button"
-                onClick={() =>
-                  typeof card.id === "number" && onSelect(card.id)
-                }
-                disabled={isTakenByOther}
-                aria-pressed={isSelected}
-                className={`relative h-[202px] w-[144px] overflow-hidden rounded-xl transition-opacity focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
-                  isSelected ? "ring-2 ring-emerald-400/70" : ""
-                } ${isTakenByOther ? "cursor-not-allowed opacity-30" : "hover:opacity-100"}`}
-                aria-label={`Select ${card.runName}`}
-              >
-                <div
-                  style={{
-                    transform: "scale(0.4)",
-                    transformOrigin: "top left",
-                    width: 360,
-                    height: 504,
-                  }}
+        {cards.length === 0 ? (
+          <p className="px-2 py-6 text-center text-sm text-white/55">
+            No cards match your search. Clear the roster filter above.
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-start justify-center gap-3">
+            {cards.map((card) => {
+              const isSelected = card.id === selectedId;
+              const isTakenByOther =
+                typeof card.id === "number" &&
+                card.id === otherSelectedId;
+              const unavailableTitle = isTakenByOther
+                ? `. Already chosen for ${otherTakenName}`
+                : "";
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() =>
+                    typeof card.id === "number" && onSelect(card.id)
+                  }
+                  disabled={isTakenByOther}
+                  aria-pressed={isSelected}
+                  title={
+                    `${card.runName}${unavailableTitle}`.trim() ||
+                    undefined
+                  }
+                  className={`relative h-[202px] w-[144px] overflow-hidden rounded-xl transition-opacity focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${
+                    isSelected ? "ring-2 ring-emerald-400/70" : ""
+                  } ${
+                    isTakenByOther
+                      ? "cursor-not-allowed opacity-30 hover:opacity-40"
+                      : "hover:opacity-100"
+                  }`}
+                  aria-label={
+                    isTakenByOther
+                      ? `${card.runName}, unavailable — already chosen for ${otherTakenName}`
+                      : `Select ${card.runName}`
+                  }
                 >
-                  <RunCard
-                    runName={card.runName}
-                    runType={card.runType}
-                    rarity={card.rarity}
-                    stats={card.stats}
-                    coordinates={card.coordinates}
-                    runNumber={card.id ?? 0}
-                    isFirstOnRoute={card.isFirstOnRoute}
-                  />
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <div
+                    style={{
+                      transform: "scale(0.4)",
+                      transformOrigin: "top left",
+                      width: 360,
+                      height: 504,
+                    }}
+                  >
+                    <RunCard
+                      runName={card.runName}
+                      runType={card.runType}
+                      rarity={card.rarity}
+                      stats={card.stats}
+                      coordinates={card.coordinates}
+                      runNumber={card.id ?? 0}
+                      isFirstOnRoute={card.isFirstOnRoute}
+                    />
+                  </div>
+                  {isTakenByOther && (
+                    <span className="absolute bottom-1 left-1 right-1 rounded-md bg-black/70 px-1 py-1 text-[9px] font-bold uppercase tracking-wide text-white/90">
+                      In {otherSideTitle}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

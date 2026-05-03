@@ -1,23 +1,10 @@
-import Link from "next/link";
 import GpxUploader from "./components/GpxUploader";
+import SiteNav from "./components/SiteNav";
 
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center px-6 py-16">
-      <nav className="mb-8 flex w-full max-w-xl items-center justify-end gap-5 text-sm font-semibold text-white/70">
-        <Link
-          href="/collection"
-          className="rounded underline-offset-4 transition-colors hover:text-white hover:underline focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-        >
-          My collection
-        </Link>
-        <Link
-          href="/battle"
-          className="rounded underline-offset-4 transition-colors hover:text-white hover:underline focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-        >
-          ⚔️ Battle
-        </Link>
-      </nav>
+      <SiteNav className="mb-8 max-w-xl" />
 
       <header className="mb-10 text-center">
         <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
@@ -26,12 +13,15 @@ export default function Home() {
         <p className="mt-3 text-base text-white/60">
           Upload a GPX file. Get a collectible card.
         </p>
+        <p className="mt-2 max-w-md text-xs text-white/45">
+          GPX mints a card, saves it locally in your collection, then you can battle and export or share a PNG.
+        </p>
       </header>
 
       <GpxUploader />
 
-      <footer className="mt-12 text-xs text-white/30">
-        Session 1 — upload only. Parsing & cards coming next.
+      <footer className="mt-12 text-center text-xs text-white/30">
+        Cards stay on this device. Download or share PNGs anytime after you upload.
       </footer>
     </main>
   );

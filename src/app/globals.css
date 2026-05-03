@@ -30,3 +30,9 @@ body {
 .route-svg-glow svg path {
   stroke-width: 2.5;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .card-shimmer {
+    animation: none !important;
+  }
+}
