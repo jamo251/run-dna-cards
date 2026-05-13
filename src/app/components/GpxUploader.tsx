@@ -59,6 +59,7 @@ function isGpxFile(file: File): boolean {
   const nameOk = file.name.toLowerCase().endsWith(".gpx");
   const typeOk =
     file.type === "" ||
+    file.type === "application/octet-stream" ||
     file.type === "application/gpx+xml" ||
     file.type === "application/xml" ||
     file.type === "text/xml";
