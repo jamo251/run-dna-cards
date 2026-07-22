@@ -308,13 +308,14 @@ export default function GpxUploader() {
     rarityTier != null &&
     runName != null &&
     runNumber != null &&
-    isFirstOnRoute != null
+    isFirstOnRoute != null &&
+    downsampledCoords != null
       ? {
           runName,
           runType,
           rarity: rarityTier,
           stats: normalizedStats,
-          coordinates: parsedStats.coordinates,
+          coordinates: downsampledCoords,
           runNumber,
           isFirstOnRoute,
         }
