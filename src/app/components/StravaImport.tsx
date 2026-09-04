@@ -91,21 +91,21 @@ async function fetchImportableRuns(): Promise<
 export default function StravaImport({ onImportGpx }: Props) {
   const [status, setStatus] = useState<StravaStatus | null>(null);
   const [activities, setActivities] = useState<ImportableRun[] | null>(null);
-  const [error, setError] = useState<string | null>(() =>
-    messageForStravaQuery(readStravaQuery())
-  );
+  const [error, setError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(false);
   const [importingId, setImportingId] = useState<number | null>(null);
 
   useEffect(() => {
-    clearStravaQuery();
-
     let cancelled = false;
 
     async function hydrate() {
+      const callbackError = messageForStravaQuery(readStravaQuery());
+      clearStravaQuery();
+
       try {
         const next = await fetchStravaStatus();
         if (cancelled) return;
+        if (callbackError) setError(callbackError);
         setStatus(next);
         if (!next.connected) {
           setActivities([]);

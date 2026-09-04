@@ -104,9 +104,7 @@ export function streamsToGpx(
       const hr = heartrate?.[index];
       if (hr != null) {
         parts.push("        <extensions>");
-        parts.push(
-          `          <gpxtpx:TrackPointExtension><gpxtpx:hr>${Math.round(hr)}</gpxtpx:hr></gpxtpx:TrackPointExtension>`
-        );
+        parts.push(`          <hr>${Math.round(hr)}</hr>`);
         parts.push("        </extensions>");
       }
 
@@ -118,7 +116,7 @@ export function streamsToGpx(
   const name = escapeXml(options.name || "Strava export");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Run DNA Cards" xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
+<gpx version="1.1" creator="Run DNA Cards" xmlns="http://www.topografix.com/GPX/1/1">
   <trk>
     <name>${name}</name>
     <trkseg>

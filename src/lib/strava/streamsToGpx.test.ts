@@ -30,8 +30,8 @@ test("streamsToGpx writes trackpoints with ele, time, and hr", () => {
   assert.match(gpx, /<ele>30<\/ele>/);
   assert.match(gpx, /<time>2026-04-01T12:00:00.000Z<\/time>/);
   assert.match(gpx, /<time>2026-04-01T12:06:00.000Z<\/time>/);
-  assert.match(gpx, /<gpxtpx:hr>140<\/gpxtpx:hr>/);
-  assert.match(gpx, /<gpxtpx:hr>150<\/gpxtpx:hr>/);
+  assert.match(gpx, /<hr>140<\/hr>/);
+  assert.match(gpx, /<hr>150<\/hr>/);
 });
 
 test("streamsToGpx escapes activity names", () => {
