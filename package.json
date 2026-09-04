@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "audit": "npm audit"
+    "audit": "npm audit",
+    "test": "tsx --test src/lib/strava/*.test.ts"
   },
   "dependencies": {
     "@tmcw/togeojson": "^7.1.2",
@@ -24,7 +25,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "linkedom": "^0.18.12",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   },
   "overrides": {

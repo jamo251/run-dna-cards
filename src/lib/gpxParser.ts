@@ -68,6 +68,11 @@ function findTrackpointHeartRate(trackPointElement: Element): NullableNumber {
   const extensions = trackPointElement.getElementsByTagName("extensions")[0];
   if (!extensions) return null;
 
+  const named = extensions.getElementsByTagName("hr")[0];
+  if (named) {
+    return parseNumber(named.textContent?.trim() ?? null);
+  }
+
   const descendants = extensions.getElementsByTagName("*");
   for (const descendant of descendants) {
     if (descendant.localName?.toLowerCase() !== "hr") continue;
