@@ -2,7 +2,7 @@
 
 ### TL;DR
 
-**Run DNA Cards** is a visually rich Next.js web app that transforms your real-world GPS runs into collectible trading cards—think Pokémon meets Strava. Upload a GPX file and instantly get a shareable card featuring your run's route, auto-classified archetype, rarity tier, and RPG-style stats. Built to showcase advanced geospatial data processing, serverless PNG generation, and modern frontend UX—all with deep portfolio and product thinking.
+**Run DNA Cards** is a visually rich Next.js web app that transforms your real-world GPS runs into collectible trading cards—think Pokémon meets Strava. Upload a GPX file or connect Strava and import one recent run; instantly get a shareable card featuring your run's route, auto-classified archetype, rarity tier, and RPG-style stats. Built to showcase advanced geospatial data processing, serverless PNG generation, and modern frontend UX—all with deep portfolio and product thinking.
 
 ---
 
@@ -28,7 +28,7 @@
 
 * There are no public user accounts, profiles, or cloud sync—cards and collections are local to your browser.
 * No manual stat editing—only GPX data and automatic classifiers determine stats and rarity.
-* No bulk import of activity history—designed for single-run uploads, real or synthetic, to keep experience focused.
+* No bulk import of activity history—designed for single-run uploads (GPX file or one Strava run), real or synthetic, to keep experience focused.
 
 ---
 
@@ -37,6 +37,7 @@
 **Runner / Collector:**
 
 * As a runner, I want to upload a GPX file, so that I can see my run as a collectible trading card.
+* As a runner, I want to connect Strava and import one recent run, so that I can mint a card without exporting a file first.
 * As a collector, I want to browse my card binder, so that I can revisit and share my favorite runs.
 * As a runner, I want my repeat attempts on the same course to evolve my card, so that I can track improvement and unlock rarity.
 * As a player, I want to battle two cards, so that I can compare my runs or challenge a friend's stats.
@@ -55,6 +56,7 @@
 * **Card Generation** (Priority: Highest)
 
   * GPX file upload via drag-and-drop or file picker (with extension/type validation and smooth error states).
+  * Optional Strava connect (OAuth) to list recent GPS runs and import one as GPX.
   * GPX parsing for route, splits, elevation, pace, heart rate (if present).
   * Run type classifier with 7 archetypes.
   * Stat normalization (distance, elevation, pace, consistency, suffer, novelty—scored 0-100).
@@ -92,11 +94,11 @@
 * Landing page with title, brand, and a welcoming hero copy—explains concept instantly.
 * Prominent drag-and-drop zone for GPX files, with accessible click-to-browse alternative.
 * Immediate feedback for invalid files, with supportive inline messaging.
-* Minimal friction: No login, no registration, no uploading personal data to a server.
+* Minimal friction: No login or registration. GPX files stay in the browser; connecting Strava only fetches the one run you import.
 
 **Core Experience**
 
-* **Step 1:** User selects or drags a GPX file onto the upload zone.
+* **Step 1:** User selects or drags a GPX file onto the upload zone, or connects Strava and imports one recent run.
   * UI: visually responds to both drag and click, validates file extension/type.
   * On error: clear, actionable error message (e.g., "Please upload a valid .gpx file exported from Strava or Garmin.").
 * **Step 2:** Upon upload, file is parsed on the client for stats, splits, and coordinates.
@@ -136,7 +138,7 @@ Sarah, a dedicated runner, is always looking for new ways to relive her favorite
 
 Run DNA Cards delivers a polished, end-to-end collectible experience:
 
-* **Card Generation:** Upload a GPX and receive instant, visually rich cards. Each card displays your route as a unique silhouette, classifies your run into one of 7 archetypes (Sprinter, Mountaineer, etc.), assigns a rarity tier (Common → Legendary), and scores 6 normalized stats.
+* **Card Generation:** Upload a GPX or import one Strava run and receive instant, visually rich cards. Each card displays your route as a unique silhouette, classifies your run into one of 7 archetypes (Sprinter, Mountaineer, etc.), assigns a rarity tier (Common → Legendary), and scores 6 normalized stats.
 * **Share & Download:** Seamless one-click PNG export (630x880px) with Satori server-side rendering. Integrated sharing flows—Web Share and Clipboard APIs support direct posting to X and Instagram, including pre-filled, platform-optimized captions under 280 characters. Clipboard fallback ensures you can always share, even without API support.
 * **Collection Binder:** Every saved card lives in an IndexedDB-backed binder at `/collection`. Cards are organized in a responsive grid, filterable by type or rarity, with full-size modals for closer inspection and shareouts.
 * **Evolution Mechanic:** Runs on the same route fingerprint (via djb2 hash of downsampled coordinates) enable card evolution when at least one stat improves. After 3 evolutions, cards gain "Evolved" status; at 10, they reach "Final Form"—each marked with animated badges and celebratory banners.
@@ -148,7 +150,7 @@ Run DNA Cards delivers a polished, end-to-end collectible experience:
 
 An end-to-end data flow for every card:
 
-1. **Upload:** User uploads a real GPX file from Strava, Garmin, or any supported device.
+1. **Upload or import:** User uploads a real GPX file, or connects Strava and imports one recent GPS run (reconstructed as GPX from activity streams).
 2. **Parse:** The GPX is parsed into route coordinates, elevation, pace splits, and optionally heart rate (via @tmcw/togeojson and custom logic).
 3. **Classify:** The run is automatically classified into one of 7 archetypes using prioritized, deterministic thresholds on distance, elevation, and consistency.
 4. **Score:** Six core stats (distance, elevation, pace, consistency, suffer, novelty) are normalized to a 0–100 scale. Rarity tier is assigned based on the highest stat.
@@ -212,6 +214,8 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 **Data Pipeline**
 
 * `src/lib/gpxParser.ts` — GPX XML → stats & route. Uses @tmcw/togeojson.
+* `src/lib/mintCardFromGpx.ts` — Shared classify/score/fingerprint/evolve path used by file upload and Strava import.
+* `src/lib/strava/` — OAuth cookies, activity filters, streams → GPX.
 * `src/lib/classifier.ts` — Classifies runs into archetypes based on parsed stats.
 * `src/lib/scorer.ts` — Normalizes stats and assigns rarity.
 * `src/lib/coordinatesToPath.ts` — Downsample & normalize coordinates into SVG path `d` for both live card and PNG.
@@ -244,6 +248,7 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 **Server-side PNG**
 
 * `src/app/api/generate-card/route.tsx` — POST endpoint, Satori+resvg server rendering, fonts fetched on demand.
+* `src/app/api/strava/` — Authorize, callback, status, disconnect, recent activities, single-run GPX, webhook ack.
 
 **App Routes**
 
@@ -254,7 +259,8 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 
 **Uploader Orchestration**
 
-* `src/app/components/GpxUploader.tsx` — Links all stages: upload → parse → classify → score → name → render → save/evolve → share/download.
+* `src/app/components/GpxUploader.tsx` — Links all stages: upload or Strava import → parse → classify → score → name → render → save/evolve → share/download.
+* `src/app/components/StravaImport.tsx` — Connect with Strava, pick one recent run, import as GPX.
 
 ---
 
@@ -264,6 +270,13 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 
 * Node.js v18+ required.
 * Any valid GPX file (exported from Strava, Garmin, COROS, etc.—not a synthetic or hand-edited file).
+* Optional Strava import: create an API application at [https://www.strava.com/settings/api](https://www.strava.com/settings/api) and set:
+
+  * `STRAVA_CLIENT_ID`
+  * `STRAVA_CLIENT_SECRET`
+  * `STRAVA_REDIRECT_URI` (optional; defaults to `{origin}/api/strava/callback`)
+  * Authorization callback URL in the Strava app: `{origin}/api/strava/callback`
+  * `STRAVA_WEBHOOK_VERIFY_TOKEN` (optional; only needed if you subscribe to Strava webhooks)
 
 **Quickstart**
 
@@ -312,7 +325,8 @@ No apologies—just proud engineering.
 
 ### Non-Goals
 
-* No public user accounts or cloud sync—cards and history are browser-local.
+* No public user accounts or cloud sync—cards and history are browser-local. Strava tokens live in httpOnly cookies, not a database.
+* No bulk history sync—only one selected Strava run is imported at a time.
 * No social networking, messaging, or follower features.
 * No paid features, monetized sharing, or pro tiers—this is intentionally a free, portfolio-first build.
 
@@ -323,6 +337,7 @@ No apologies—just proud engineering.
 **Runner**
 
 * As a runner, I want to upload my GPX, so that I can see a beautiful, meaningful card of my run.
+* As a runner, I want to connect Strava and pick one run, so that I can mint a card without downloading a file first.
 * As a runner, I want my best runs and improvements to be visible, so that I can track my journey and progress.
 * As a runner, I want to share my accomplishments easily to social media, so that I can inspire my network.
 
@@ -341,7 +356,7 @@ No apologies—just proud engineering.
 
 * **GPX Parsing & Card Generation** (Priority: Must-have)
 
-  * GPX upload (drag-drop + click).
+  * GPX upload (drag-drop + click) or single-run Strava import.
   * Client-side parsing of GPX for route, elevation, pace, splits, heart rate.
   * Run type classifier (7 archetypes).
   * Stat normalization (distance, elevation, pace, consistency, suffer, novelty).
@@ -380,7 +395,7 @@ No apologies—just proud engineering.
 **Entry Point**
 
 * User visits landing page, instantly sees what the app does (branding, hero, simple explainers).
-* First thing visible: upload zone—drag-and-drop or click to select GPX file.
+* First thing visible: upload zone—drag-and-drop or click to select GPX file—plus Connect with Strava to import one recent run.
 
 **First Use**
 
@@ -465,13 +480,14 @@ Matthew, a mid-pack marathon runner, wants to make his training stick and share 
 ### Integration Points
 
 * @tmcw/togeojson for GPX ingestion.
+* Strava OAuth + activity streams (reconstructed as GPX for the existing parser).
 * Satori + resvg-js for stateless PNG exports (backed with Google Fonts as ArrayBuffer).
 * Web Share API and Clipboard API for social flows—desktop and mobile fallback logic.
 
 ### Data Storage & Privacy
 
-* All run/card data stays in the browser IndexedDB; no personal info leaves the user’s device.
-* No accounts, no cloud sync—privacy by design.
+* All cards stay in the browser IndexedDB; there are no user accounts or cloud collections.
+* Connecting Strava stores OAuth tokens in httpOnly cookies and fetches only the chosen run’s streams through the server to build GPX. That GPS payload is not logged or persisted.
 * PNGs and captions only exported via explicit user action; never saved server-side.
 
 ### Scalability & Performance
