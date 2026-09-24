@@ -4,45 +4,26 @@ import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import CardExportActions from "@/app/components/CardExportActions";
 import RunCard, { type RunCardProps } from "@/app/components/RunCard";
+import { evolveCard, saveCard } from "@/lib/cardStorage";
+import { type RunType } from "@/lib/classifier";
+import { type EvolutionStage } from "@/lib/evolutionConfig";
+import { type ParsedGpxStats } from "@/lib/gpxParser";
 import {
-  downsampleCoordinates,
-  evolveCard,
-  getAllCards,
-  getCardCount,
-  getRouteFingerprint,
-  saveCard,
-} from "@/lib/cardStorage";
-import { classifyRun, type RunType } from "@/lib/classifier";
+  mintCardFromGpx,
+  type MintSaveMode,
+} from "@/lib/mintCardFromGpx";
 import {
-  getEvolutionStage,
-  type EvolutionStage,
-} from "@/lib/evolutionConfig";
-import { parseGpx, type ParsedGpxStats } from "@/lib/gpxParser";
-import { deriveRunName } from "@/lib/runName";
-import {
-  assignRarity,
-  normalizeStats,
   type NormalizedStats,
   type RarityTier,
 } from "@/lib/scorer";
 import { MAX_GPX_FILE_BYTES } from "@/lib/gpxLimits";
 import { buildShareCaption } from "@/lib/shareCaption";
-
-type SaveMode = { kind: "new" } | { kind: "evolve"; id: number };
+import StravaImport from "@/app/components/StravaImport";
 
 type UploadOutcome =
   | { kind: "fresh" }
   | { kind: "evolved"; stage: EvolutionStage }
   | { kind: "no-improvement"; fileName: string };
-
-const STAT_KEYS: Array<keyof NormalizedStats> = [
-  "distance",
-  "elevation",
-  "pace",
-  "consistency",
-  "suffer",
-  "novelty",
-];
 
 const STAGE_LABELS: Record<EvolutionStage, string> = {
   base: "Stronger Form",
@@ -52,6 +33,7 @@ const STAGE_LABELS: Record<EvolutionStage, string> = {
 
 type Status =
   | { kind: "idle" }
+  | { kind: "loading"; message: string }
   | { kind: "error"; message: string }
   | { kind: "success"; fileName: string };
 
@@ -89,7 +71,7 @@ export default function GpxUploader() {
   const [downsampledCoords, setDownsampledCoords] =
     useState<Array<[number, number]> | null>(null);
   const [evolutionCount, setEvolutionCount] = useState<number | null>(null);
-  const [saveMode, setSaveMode] = useState<SaveMode | null>(null);
+  const [saveMode, setSaveMode] = useState<MintSaveMode | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<UploadOutcome | null>(null);
   const savedParsedRef = useRef<ParsedGpxStats | null>(null);
 
@@ -155,6 +137,46 @@ export default function GpxUploader() {
     evolutionCount,
   ]);
 
+  const handleGpxText = useCallback(
+    async (text: string, sourceName: string) => {
+      try {
+        const result = await mintCardFromGpx(text, sourceName);
+        if (result.kind === "no-improvement") {
+          resetParsedState();
+          setUploadOutcome({
+            kind: "no-improvement",
+            fileName: result.sourceName,
+          });
+          setStatus({ kind: "idle" });
+          return;
+        }
+
+        setParsedStats(result.parsed);
+        setRunType(result.runType);
+        setNormalizedStats(result.normalized);
+        setRarityTier(result.rarity);
+        setRunName(result.runName);
+        setDownsampledCoords(result.downsampledCoords);
+        setRouteFingerprint(result.routeFingerprint);
+        setIsFirstOnRoute(result.isFirstOnRoute);
+        setRunNumber(result.runNumber);
+        setEvolutionCount(result.evolutionCount);
+        setSaveMode(result.saveMode);
+        setUploadOutcome(result.outcome);
+        setStatus({ kind: "success", fileName: sourceName });
+      } catch (err) {
+        resetParsedState();
+        setStatus({
+          kind: "error",
+          message: `Couldn't read the run: ${
+            err instanceof Error ? err.message : "unknown error"
+          }`,
+        });
+      }
+    },
+    [resetParsedState]
+  );
+
   const handleFile = useCallback(
     async (file: File) => {
       if (!isGpxFile(file)) {
@@ -175,87 +197,10 @@ export default function GpxUploader() {
         return;
       }
 
+      setStatus({ kind: "loading", message: "Reading your GPX…" });
+      let text: string;
       try {
-        const text = await readFileAsText(file);
-        const parsed = parseGpx(text);
-        const assignedRunType = classifyRun(parsed);
-        const normalized = normalizeStats(parsed);
-        const assignedRarity = assignRarity(normalized);
-        const derivedName = deriveRunName(file.name, assignedRunType);
-        const ds = downsampleCoordinates(parsed.coordinates);
-        const fingerprint = getRouteFingerprint(ds);
-
-        let computedRunNumber = 1;
-        let computedFirstOnRoute = true;
-        let computedEvolutionCount = 0;
-        let computedSaveMode: SaveMode = { kind: "new" };
-        let computedOutcome: UploadOutcome = { kind: "fresh" };
-
-        try {
-          const existingCards = await getAllCards();
-          const matches = existingCards
-            .filter((c) => c.routeFingerprint === fingerprint)
-            .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-          const match = matches[0];
-
-          if (!match) {
-            const count = await getCardCount();
-            computedRunNumber = count + 1;
-            computedFirstOnRoute = true;
-            computedEvolutionCount = 0;
-            computedSaveMode = { kind: "new" };
-            computedOutcome = { kind: "fresh" };
-          } else {
-            const improved = STAT_KEYS.some(
-              (key) => normalized[key] > (match.stats[key] ?? 0)
-            );
-            if (!improved) {
-              resetParsedState();
-              setUploadOutcome({
-                kind: "no-improvement",
-                fileName: file.name,
-              });
-              setStatus({ kind: "idle" });
-              return;
-            }
-            const matchId = match.id;
-            if (typeof matchId !== "number") {
-              throw new Error("Matched card is missing an id");
-            }
-            computedRunNumber = matchId;
-            computedFirstOnRoute = match.isFirstOnRoute;
-            computedEvolutionCount = (match.evolutionCount ?? 0) + 1;
-            computedSaveMode = { kind: "evolve", id: matchId };
-            computedOutcome = {
-              kind: "evolved",
-              stage: getEvolutionStage(computedEvolutionCount),
-            };
-          }
-        } catch (storageErr) {
-          console.warn(
-            "Card storage unavailable; falling back to in-session defaults",
-            storageErr
-          );
-          computedRunNumber = 1;
-          computedFirstOnRoute = true;
-          computedEvolutionCount = 0;
-          computedSaveMode = { kind: "new" };
-          computedOutcome = { kind: "fresh" };
-        }
-
-        setParsedStats(parsed);
-        setRunType(assignedRunType);
-        setNormalizedStats(normalized);
-        setRarityTier(assignedRarity);
-        setRunName(derivedName);
-        setDownsampledCoords(ds);
-        setRouteFingerprint(fingerprint);
-        setIsFirstOnRoute(computedFirstOnRoute);
-        setRunNumber(computedRunNumber);
-        setEvolutionCount(computedEvolutionCount);
-        setSaveMode(computedSaveMode);
-        setUploadOutcome(computedOutcome);
-        setStatus({ kind: "success", fileName: file.name });
+        text = await readFileAsText(file);
       } catch (err) {
         resetParsedState();
         setStatus({
@@ -264,9 +209,19 @@ export default function GpxUploader() {
             err instanceof Error ? err.message : "unknown error"
           }`,
         });
+        return;
       }
+      await handleGpxText(text, file.name);
     },
-    [resetParsedState]
+    [handleGpxText, resetParsedState]
+  );
+
+  const handleStravaImport = useCallback(
+    async (text: string, sourceName: string) => {
+      setStatus({ kind: "loading", message: "Minting a card from Strava…" });
+      await handleGpxText(text, sourceName);
+    },
+    [handleGpxText]
   );
 
   const onDrop = useCallback(
@@ -359,6 +314,17 @@ export default function GpxUploader() {
           or click here to browse — your run becomes a card
         </p>
       </label>
+
+      <StravaImport onImportGpx={handleStravaImport} />
+
+      {status.kind === "loading" && (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-white/15 bg-white/[0.03] px-4 py-3 text-sm text-white/70"
+        >
+          {status.message}
+        </p>
+      )}
 
       {status.kind === "error" && (
         <p

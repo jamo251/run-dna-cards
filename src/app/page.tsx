@@ -11,7 +11,7 @@ export default function Home() {
           Run DNA Cards
         </h1>
         <p className="mt-3 text-base text-white/60">
-          Upload a GPX file. Get a collectible card.
+          Upload a GPX file or import a run from Strava. Get a collectible card.
         </p>
         <p className="mt-2 max-w-md text-xs text-white/45">
           GPX mints a card, saves it locally in your collection, then you can battle and export or share a PNG.
@@ -21,7 +21,8 @@ export default function Home() {
       <GpxUploader />
 
       <footer className="mt-12 text-center text-xs text-white/30">
-        Cards stay on this device. Download or share PNGs anytime after you upload.
+        Cards stay on this device. Connecting Strava only fetches the run you
+        import. Download or share PNGs anytime after you upload.
       </footer>
     </main>
   );

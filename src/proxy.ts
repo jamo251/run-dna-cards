@@ -93,11 +93,13 @@ export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const cspHeader = contentSecurityPolicyValue(nonce);
 
-  const isGenerateCard =
-    request.nextUrl.pathname === "/api/generate-card" &&
-    request.method === "POST";
+  const pathname = request.nextUrl.pathname;
+  const isWebhook = pathname === "/api/strava/webhook";
+  const isRateLimitedApi =
+    (pathname === "/api/generate-card" && request.method === "POST") ||
+    (pathname.startsWith("/api/strava/") && !isWebhook);
 
-  if (isGenerateCard) {
+  if (isRateLimitedApi) {
     const ip = clientIp(request);
     const now = Date.now();
     if (!allowRateLimit(ip, now)) {
@@ -120,6 +122,7 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/api/generate-card",
+    "/api/strava/:path*",
     {
       source: "/((?!api|_next/static|_next/image|favicon.ico).*)",
       missing: [
