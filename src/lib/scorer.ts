@@ -1,4 +1,5 @@
 import type { ParsedGpxStats } from "@/lib/gpxParser";
+import { computeNoveltyScore } from "@/lib/novelty";
 
 export type NormalizedStats = {
   distance: number;
@@ -19,7 +20,6 @@ const PACE_FAST_MIN_MIN_PER_KM = 3;
 const PACE_SLOW_MAX_MIN_PER_KM = 10;
 const CONSISTENCY_STDDEV_MIN = 0;
 const CONSISTENCY_STDDEV_MAX = 1.5;
-const NOVELTY_PLACEHOLDER_SCORE = 50;
 
 const HR_AVERAGE_MIN = 100;
 const HR_AVERAGE_MAX = 190;
@@ -148,7 +148,7 @@ export function normalizeStats(stats: ParsedGpxStats): NormalizedStats {
       CONSISTENCY_STDDEV_MAX
     ),
     suffer: computeSufferScore(stats),
-    novelty: NOVELTY_PLACEHOLDER_SCORE,
+    novelty: computeNoveltyScore(stats.coordinates, stats.totalDistanceKm),
   };
 }
 
