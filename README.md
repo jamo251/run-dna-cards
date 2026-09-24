@@ -208,8 +208,8 @@ novelty = clamp(
 
 | Component | Weight | Meaning |
 | --- | --- | --- |
-| **Exploration** | 0.40 | Distinct ~40 m spatial cells covered relative to path length |
-| **Complexity** | 0.35 | Meaningful heading change (deg/km), ignoring GPS jitter below 8° |
+| **Exploration** | 0.40 | Blend of unique ~40 m cells vs path length (non-overlap) and vs bounding-box fill (area coverage) |
+| **Complexity** | 0.35 | Meaningful heading change (deg/km), ignoring GPS jitter below 2° |
 | **Non-retrace** | 0.25 | How little the second half mirrors a reverse of the first (anti out-and-back) |
 
 **Expected score bands** (tuning targets, not hard clamps):
@@ -218,9 +218,9 @@ novelty = clamp(
 | --- | --- |
 | 15–35 | Out-and-back on the same road |
 | 35–50 | Mostly straight point-to-point |
-| 40–55 | Simple oval / track-style loop |
+| 40–60 | Simple oval / track-style loop |
 | 65–85 | Twisty trail or neighborhood maze with little retrace |
-| 85–100 | Dense exploration, figure-8 / multi-loop covering distinct ground |
+| 75–100 | Dense exploration with high turning and distinct coverage |
 
 **Edge cases:** fewer than 2 points or zero distance → 0; runs under 0.5 km use softer complexity/exploration caps so tiny GPS loops cannot farm Legendary novelty.
 

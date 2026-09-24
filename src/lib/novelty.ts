@@ -3,17 +3,26 @@ const EARTH_RADIUS_M = 6371000;
 
 const MAX_NOVELTY_POINTS = 400;
 const GRID_CELL_SIZE_M = 40;
-const EXPLORATION_RAW_MIN = 0.25;
+const EXPLORATION_RAW_MIN = 0.2;
 const EXPLORATION_RAW_MAX = 1.0;
+/** Blend between non-overlap along the path vs how fully the bbox is filled. */
+const EXPLORATION_LENGTH_WEIGHT = 0.55;
+const EXPLORATION_FILL_WEIGHT = 0.45;
 
-const TURN_NOISE_FLOOR_DEG = 8;
-const COMPLEXITY_MIN_DEG_PER_KM = 80;
-const COMPLEXITY_MAX_DEG_PER_KM = 800;
+/** Ignore heading deltas below this (degrees); downsampling already reduces GPS jitter. */
+const TURN_NOISE_FLOOR_DEG = 2;
+const COMPLEXITY_MIN_DEG_PER_KM = 50;
+const COMPLEXITY_MAX_DEG_PER_KM = 320;
 
 const NON_RETRACE_SAMPLE_POINTS = 50;
+/**
+ * Mean point distance (m) at which reverse-half alignment is treated as fully dissimilar.
+ * Same-road out-and-backs land near 0; unrelated halves exceed this quickly.
+ */
+const RETRACE_DISTANCE_MAX_M = 120;
 
 const SHORT_RUN_KM = 0.5;
-const SHORT_RUN_COMPLEXITY_MAX_DEG_PER_KM = 1200;
+const SHORT_RUN_COMPLEXITY_MAX_DEG_PER_KM = 550;
 const SHORT_RUN_EXPLORATION_RAW_MAX = 1.15;
 
 const EXPLORATION_WEIGHT = 0.4;
@@ -116,15 +125,36 @@ function computeExplorationScore(
   totalDistanceM: number,
   isShortRun: boolean
 ): number {
+  let minX = points[0].x;
+  let maxX = points[0].x;
+  let minY = points[0].y;
+  let maxY = points[0].y;
+  for (const point of points) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+
+  // Origin the grid at the bbox min so thin corridors are not split across a cell boundary.
   const cells = new Set<string>();
   for (const point of points) {
-    const gx = Math.floor(point.x / GRID_CELL_SIZE_M);
-    const gy = Math.floor(point.y / GRID_CELL_SIZE_M);
+    const gx = Math.floor((point.x - minX) / GRID_CELL_SIZE_M);
+    const gy = Math.floor((point.y - minY) / GRID_CELL_SIZE_M);
     cells.add(`${gx},${gy}`);
   }
 
-  const expectedCells = Math.max(totalDistanceM / GRID_CELL_SIZE_M, 1);
-  const raw = cells.size / expectedCells;
+  const lengthExpected = Math.max(totalDistanceM / GRID_CELL_SIZE_M, 1);
+  const lengthEfficiency = clamp(cells.size / lengthExpected, 0, 1.25);
+
+  const widthCells = Math.max(1, Math.ceil((maxX - minX) / GRID_CELL_SIZE_M));
+  const heightCells = Math.max(1, Math.ceil((maxY - minY) / GRID_CELL_SIZE_M));
+  const bboxCells = widthCells * heightCells;
+  const bboxFill = clamp(cells.size / bboxCells, 0, 1);
+
+  const raw =
+    lengthEfficiency * EXPLORATION_LENGTH_WEIGHT +
+    bboxFill * EXPLORATION_FILL_WEIGHT;
   const rawMax = isShortRun ? SHORT_RUN_EXPLORATION_RAW_MAX : EXPLORATION_RAW_MAX;
   return normalizeLinear(raw, EXPLORATION_RAW_MIN, rawMax);
 }
@@ -255,7 +285,7 @@ function computeNonRetraceScore(
     sumDistance += distance2D(firstSampled[i], secondReversed[i]);
   }
   const meanDistance = sumDistance / NON_RETRACE_SAMPLE_POINTS;
-  const similarity = clamp(1 - meanDistance / pathLengthM, 0, 1);
+  const similarity = clamp(1 - meanDistance / RETRACE_DISTANCE_MAX_M, 0, 1);
   return (1 - similarity) * 100;
 }
 
@@ -288,10 +318,14 @@ export function computeNoveltyScore(
 
   const exploration = computeExplorationScore(
     points,
-    distanceKm * METERS_PER_KM,
+    pathLengthM,
     isShortRun
   );
-  const complexity = computeComplexityScore(points, distanceKm, isShortRun);
+  const complexity = computeComplexityScore(
+    points,
+    pathLengthM / METERS_PER_KM,
+    isShortRun
+  );
   const nonRetrace = computeNonRetraceScore(points, pathLengthM);
 
   return clamp(
