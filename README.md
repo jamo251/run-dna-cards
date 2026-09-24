@@ -191,6 +191,43 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 
 ---
 
+## Novelty
+
+**Novelty** measures route-shape uniqueness: how much the path explores distinct ground and avoids repeating itself. It is computed only from GPX coordinates (deterministic; no binder or personal-history lookup).
+
+**Formula (0–100):**
+
+```
+novelty = clamp(
+  0.40 * exploration +
+  0.35 * complexity +
+  0.25 * nonRetrace,
+  0, 100
+)
+```
+
+| Component | Weight | Meaning |
+| --- | --- | --- |
+| **Exploration** | 0.40 | Blend of unique ~40 m cells vs path length (non-overlap) and vs bounding-box fill (area coverage) |
+| **Complexity** | 0.35 | Meaningful heading change (deg/km), ignoring GPS jitter below 2° |
+| **Non-retrace** | 0.25 | How little the second half mirrors a reverse of the first (anti out-and-back) |
+
+**Expected score bands** (tuning targets, not hard clamps):
+
+| Band | Typical route |
+| --- | --- |
+| 15–35 | Out-and-back on the same road |
+| 35–50 | Mostly straight point-to-point |
+| 40–60 | Simple oval / track-style loop |
+| 65–85 | Twisty trail or neighborhood maze with little retrace |
+| 75–100 | Dense exploration with high turning and distinct coverage |
+
+**Edge cases:** fewer than 2 points or zero distance → 0; runs under 0.5 km use softer complexity/exploration caps so tiny GPS loops cannot farm Legendary novelty.
+
+Implementation: `src/lib/novelty.ts` (`computeNoveltyScore`), wired from `src/lib/scorer.ts`.
+
+---
+
 ## Tech Stack
 
 * **Next.js 16 (App Router):** Modern React, SSR and API routes in one. Chosen for Vercel compatibility and ecosystem fit.
@@ -214,6 +251,7 @@ Holographic/foil effects are implemented as SVG patterns and gradients so export
 * `src/lib/gpxParser.ts` — GPX XML → stats & route. Uses @tmcw/togeojson.
 * `src/lib/classifier.ts` — Classifies runs into archetypes based on parsed stats.
 * `src/lib/scorer.ts` — Normalizes stats and assigns rarity.
+* `src/lib/novelty.ts` — Route-shape novelty from coordinates (exploration, complexity, non-retrace).
 * `src/lib/coordinatesToPath.ts` — Downsample & normalize coordinates into SVG path `d` for both live card and PNG.
 
 **Theming & Naming**
